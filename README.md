@@ -1,145 +1,31 @@
 name: Build APK
-
-on:
-  push:
-    branches: [ "main", "master" ]
-  workflow_dispatch:
-
+on: [push, workflow_dispatch]
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Generate Project Files
-        shell: python
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+      - uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: '8.7'
+      - name: Create App & Build
         run: |
+          python3 -c '
           import os
           os.makedirs("app/src/main/java/com/example/minimalistplayer", exist_ok=True)
-
-          files = {
-              "settings.gradle.kts": '''pluginManagement {
-              repositories {
-                  google()
-                  mavenCentral()
-                  gradlePluginPortal()
-              }
-          }
-          dependencyResolutionManagement {
-              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
-              repositories {
-                  google()
-                  mavenCentral()
-              }
-          }
-          rootProject.name = "MinimalistMusicPlayer"
-          include(":app")''',
-
-              "build.gradle.kts": '''plugins {
-              id("com.android.application") version "8.4.0" apply false
-              id("org.jetbrains.kotlin.android") version "1.9.23" apply false
-          }''',
-
-              "gradle.properties": '''org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
-          android.useAndroidX=true
-          kotlin.code.style=official
-          android.nonTransitiveRClass=true''',
-
-              "app/build.gradle.kts": '''plugins {
-              id("com.android.application")
-              id("org.jetbrains.kotlin.android")
-          }
-          android {
-              namespace = "com.example.minimalistplayer"
-              compileSdk = 34
-              defaultConfig {
-                  applicationId = "com.example.minimalistplayer"
-                  minSdk = 26
-                  targetSdk = 34
-                  versionCode = 1
-                  versionName = "1.0"
-              }
-              compileOptions {
-                  sourceCompatibility = JavaVersion.VERSION_17
-                  targetCompatibility = JavaVersion.VERSION_17
-              }
-              kotlinOptions { jvmTarget = "17" }
-              buildFeatures { compose = true }
-              composeOptions { kotlinCompilerExtensionVersion = "1.5.13" }
-          }
-          dependencies {
-              implementation(platform("androidx.compose:compose-bom:2024.04.01"))
-              implementation("androidx.compose.ui:ui")
-              implementation("androidx.compose.ui:ui-graphics")
-              implementation("androidx.compose.material3:material3")
-              implementation("androidx.compose.material:material-icons-extended")
-              implementation("androidx.media3:media3-exoplayer:1.3.1")
-              implementation("androidx.media3:media3-session:1.3.1")
-              implementation("androidx.media3:media3-ui:1.3.1")
-              implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.7.0")
-              implementation("androidx.activity:activity-compose:1.9.0")
-          }''',
-
-              "app/src/main/AndroidManifest.xml": '''<?xml version="1.0" encoding="utf-8"?>
-          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-              <uses-permission android:name="android.permission.INTERNET" />
-              <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
-              <application
-                  android:allowBackup="true"
-                  android:label="Minimalist Player"
-                  android:supportsRtl="true"
-                  android:theme="@android:style/Theme.DeviceDefault.NoActionBar">
-                  <activity
-                      android:name=".MainActivity"
-                      android:exported="true">
-                      <intent-filter>
-                          <action android:name="android.intent.action.MAIN" />
-                          <category android:name="android.intent.category.LAUNCHER" />
-                      </intent-filter>
-                  </activity>
-              </application>
-          </manifest>''',
-
-              "app/src/main/java/com/example/minimalistplayer/Track.kt": '''package com.example.minimalistplayer
-          data class Track(val id: String, val title: String, val artist: String, val durationMs: Long, val mediaUri: String)
-          val sampleTracks = listOf(
-              Track("1", "Weightless", "Marconi Union", 372000L, "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3"),
-              Track("2", "Aura", "Bicep", 425000L, "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3"),
-              Track("3", "Solaris", "Cliff Martinez", 344000L, "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3"),
-              Track("4", "An Ending (Ascent)", "Brian Eno", 302000L, "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3")
-          )''',
-
-              "app/src/main/java/com/example/minimalistplayer/MusicPlayerViewModel.kt": '''package com.example.minimalistplayer
-          import android.app.Application
-          import androidx.lifecycle.AndroidViewModel
-          import androidx.lifecycle.viewModelScope
-          import androidx.media3.common.MediaItem
-          import androidx.media3.common.Player
-          import androidx.media3.exoplayer.ExoPlayer
-          import kotlinx.coroutines.delay
-          import kotlinx.coroutines.flow.*
-          import kotlinx.coroutines.launch
-
-          data class PlayerUiState(
-              val currentTrack: Track? = null,
-              val isPlaying: Boolean = false,
-              val currentPositionMs: Long = 0L,
-              val durationMs: Long = 0L,
-              val trackList: List<Track> = sampleTracks
-          )
-
-          class MusicPlayerViewModel(application: Application) : AndroidViewModel(application) {
-              private val player: ExoPlayer = ExoPlayer.Builder(application).build()
-              private val _uiState = MutableStateFlow(PlayerUiState())
-              val uiState: StateFlow<PlayerUiState> = _uiState.asStateFlow()
-
-              init {
-                  player.addListener(object : Player.Listener {
-                      override fun onIsPlayingChanged(isPlaying: Boolean) {
-                          _uiState.update { it.copy(isPlaying = isPlaying) }
-                      }
-                      override fun onPlaybackStateChanged(playbackState: Int) {
-                          if (playbackState == Player.STATE_READY) {
-                              _uiState.update { it.copy(durationMs = player.duration.coerceAtLeast(0L)) }
-                          }
+          open("settings.gradle.kts","w").write("pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }\ndependencyResolutionManagement { repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS); repositories { google(); mavenCentral() } }\nrootProject.name = \"MinimalistMusicPlayer\"\ninclude(\":app\")\n")
+          open("build.gradle.kts","w").write("plugins { id(\"com.android.application\") version \"8.4.0\" apply false; id(\"org.jetbrains.kotlin.android\") version \"1.9.24\" apply false }\n")
+          open("gradle.properties","w").write("org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8\nandroid.useAndroidX=true\n")
+          open("app/build.gradle.kts","w").write("plugins { id(\"com.android.application\"); id(\"org.jetbrains.kotlin.android\") }\nandroid {\n namespace = \"com.example.minimalistplayer\"\n compileSdk = 34\n defaultConfig { applicationId = \"com.example.minimalistplayer\"; minSdk = 26; targetSdk = 34; versionCode = 1; versionName = \"1.0\" }\n compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }\n kotlinOptions { jvmTarget = \"17\" }\n buildFeatures { compose = true }\n composeOptions { kotlinCompilerExtensionVersion = \"1.5.14\" }\n}\ndependencies {\n implementation(platform(\"androidx.compose:compose-bom:2024.04.01\"))\n implementation(\"androidx.compose.ui:ui\")\n implementation(\"androidx.compose.material3:material3\")\n implementation(\"androidx.compose.material:material-icons-extended\")\n implementation(\"androidx.media3:media3-exoplayer:1.3.1\")\n implementation(\"androidx.lifecycle:lifecycle-viewmodel-compose:2.7.0\")\n implementation(\"androidx.activity:activity-compose:1.9.0\")\n}\n")
+          open("app/src/main/AndroidManifest.xml","w").write("<?xml version=\"1.0\" encoding=\"utf-8\"?><manifest xmlns:android=\"http://schemas.android.com/apk/res/android\"><uses-permission android:name=\"android.permission.INTERNET\"/><application android:label=\"Minimalist Player\" android:theme=\"@android:style/Theme.DeviceDefault.NoActionBar\"><activity android:name=\".MainActivity\" android:exported=\"true\"><intent-filter><action android:name=\"android.intent.action.MAIN\"/><category android:name=\"android.intent.category.LAUNCHER\"/></intent-filter></activity></application></manifest>")
+          open("app/src/main/java/com/example/minimalistplayer/MainActivity.kt","w").write("package com.example.minimalistplayer\nimport android.os.Bundle\nimport androidx.activity.ComponentActivity\nimport androidx.activity.compose.setContent\nimport androidx.compose.animation.core.*\nimport androidx.compose.foundation.*\nimport androidx.compose.foundation.layout.*\nimport androidx.compose.foundation.lazy.*\nimport androidx.compose.foundation.shape.CircleShape\nimport androidx.compose.material.icons.Icons\nimport androidx.compose.material.icons.rounded.*\nimport androidx.compose.material3.*\nimport androidx.compose.runtime.*\nimport androidx.compose.ui.*\nimport androidx.compose.ui.draw.*\nimport androidx.compose.ui.graphics.Color\nimport androidx.compose.ui.text.font.FontWeight\nimport androidx.compose.ui.unit.*\nimport androidx.media3.common.MediaItem\nimport androidx.media3.exoplayer.ExoPlayer\nimport kotlinx.coroutines.delay\n\ndata class Track(val id: String, val title: String, val artist: String, val durationMs: Long, val url: String)\nval tracks = listOf(\n Track(\"1\", \"Weightless\", \"Marconi Union\", 372000L, \"https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3\"),\n Track(\"2\", \"Aura\", \"Bicep\", 425000L, \"https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3\"),\n Track(\"3\", \"Solaris\", \"Cliff Martinez\", 344000L, \"https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3\")\n)\n\nclass MainActivity : ComponentActivity() {\n private lateinit var player: ExoPlayer\n override fun onCreate(savedInstanceState: Bundle?) {\n  super.onCreate(savedInstanceState)\n  player = ExoPlayer.Builder(this).build()\n  setContent { PlayerApp(player) }\n }\n override fun onDestroy() { super.onDestroy(); player.release() }\n}\n\n@Composable\nfun PlayerApp(player: ExoPlayer) {\n var current by remember { mutableStateOf(tracks[0]) }\n var playing by remember { mutableStateOf(false) }\n var pos by remember { mutableStateOf(0L) }\n LaunchedEffect(current) {\n  player.setMediaItem(MediaItem.fromUri(current.url))\n  player.prepare()\n  if (playing) player.play()\n }\n LaunchedEffect(playing) {\n  while (playing) { pos = player.currentPosition; delay(500) }\n }\n Surface(Modifier.fillMaxSize(), color = Color(0xFF121212)) {\n  Column(Modifier.fillMaxSize().padding(28.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.SpaceBetween) {\n   Text(\"NOW PLAYING\", letterSpacing = 4.sp, fontSize = 11.sp, color = Color.White.copy(0.4f), modifier = Modifier.padding(top = 16.dp))\n   Box(Modifier.size(200.dp).clip(CircleShape).background(Color(0xFF1E1E1E)), contentAlignment = Alignment.Center) {\n    Box(Modifier.size(54.dp).clip(CircleShape).background(Color(0xFF282828)))\n   }\n   Column(horizontalAlignment = Alignment.CenterHorizontally) {\n    Text(current.title, fontSize = 24.sp, fontWeight = FontWeight.Light, color = Color.White)\n    Text(current.artist.uppercase(), fontSize = 12.sp, letterSpacing = 2.sp, color = Color.White.copy(0.5f))\n   }\n   Column(Modifier.fillMaxWidth()) {\n    Slider(value = if (current.durationMs > 0) pos.toFloat() / current.durationMs else 0f, onValueChange = { pos = (it * current.durationMs).toLong(); player.seekTo(pos) })\n    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {\n     IconButton(onClick = { val i = tracks.indexOf(current); if (i > 0) current = tracks[i - 1] }) { Icon(Icons.Rounded.SkipPrevious, null, tint = Color.White) }\n     Box(Modifier.size(64.dp).clip(CircleShape).background(Color.White).clickable { if (playing) player.pause() else player.play(); playing = !playing }, contentAlignment = Alignment.Center) {\n      Icon(if (playing) Icons.Rounded.Pause else Icons.Rounded.PlayArrow, null, tint = Color.Black, modifier = Modifier.size(32.dp))\n     }\n     IconButton(onClick = { val i = tracks.indexOf(current); if (i < tracks.lastIndex) current = tracks[i + 1] }) { Icon(Icons.Rounded.SkipNext, null, tint = Color.White) }\n    }\n   }\n   LazyColumn(Modifier.fillMaxWidth().heightIn(max = 120.dp)) {\n    itemsIndexed(tracks) { i, t ->\n     Text(\"${i + 1}. ${t.title}\", color = if (t == current) Color.White else Color.White.copy(0.5f), modifier = Modifier.fillMaxWidth().clickable { current = t; playing = true }.padding(vertical = 6.dp))\n    }\n   }\n  }\n }\n}\n")
+          '
+          gradle assembleDebug
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MinimalistMusicPlayer-APK
+          path: app/build/outputs/apk/debug/app-debug.apk
